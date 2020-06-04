@@ -1,11 +1,11 @@
 package wumanber
 
 import (
-	"errors"
-	"os"
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"log"
+	"os"
 )
 
 func HashCode(str string) uint32 {
@@ -17,12 +17,11 @@ func HashCode(str string) uint32 {
 }
 
 type PrefixIdPair struct {
-	Hash uint32
+	Hash  uint32
 	Index int32
 }
 
 type PrefixTable []PrefixIdPair
-
 
 type WuManber struct {
 	// minum length of patterns
@@ -62,25 +61,24 @@ func (w *WuManber) Init(patterns []string) error {
 	}
 
 	if w.Block > w.Min {
-		log.Println("Warning: Block is larger than minum pattern length, reset mBlock to minmum, but it will seriously affect the effiency.")
+		// log.Println("Warning: Block is larger than minum pattern length, reset mBlock to minmum, but it will seriously affect the effiency.")
 		w.Block = w.Min
 	}
 
-	primes := []int32 {1003, 10007, 100003, 1000003, 10000019, 100000007}
+	primes := []int32{1003, 10007, 100003, 1000003, 10000019, 100000007}
 	threshold := 10 * w.Min
 	for _, p := range primes {
-		if p > patternSize && p / patternSize > threshold {
+		if p > patternSize && p/patternSize > threshold {
 			w.TableSize = p
 			break
 		}
 	}
 
 	if w.TableSize == 0 {
-		log.Println("Warning: amount of pattern is very large, will cost a great amount of memory.")
+		// log.Println("Warning: amount of pattern is very large, will cost a great amount of memory.")
 		w.TableSize = primes[5]
 	}
 	//fmt.Println(w.TableSize)
-
 
 	w.HashTable = make([]PrefixTable, w.TableSize)
 	for i := 0; i < int(w.TableSize); i++ {
@@ -97,7 +95,7 @@ func (w *WuManber) Init(patterns []string) error {
 		for index := w.Min; index >= w.Block; index-- {
 			start := index - w.Block
 			//fmt.Println(patterns[id][start:start + w.Block])
-			hashCode := HashCode(patterns[id][start:start + w.Block]) % uint32(w.TableSize)
+			hashCode := HashCode(patterns[id][start:start+w.Block]) % uint32(w.TableSize)
 			//fmt.Println(hashCode)
 			if w.ShiftTable[hashCode] > (w.Min - index) {
 				w.ShiftTable[hashCode] = w.Min - index
@@ -112,23 +110,24 @@ func (w *WuManber) Init(patterns []string) error {
 	return nil
 }
 
-func (w *WuManber) Search(text string) int {
+func (w *WuManber) Search(text string) ([]string, []int) {
 	// hit count
-	var hits int = 0
-	var index int32 = w.Min - 1; // start off by matching end of largest common pattern
+	var matches []string
+	var matchPositions []int
+	var index int32 = w.Min - 1 // start off by matching end of largest common pattern
 
 	var blockMaxIndex int32 = w.Block - 1
 	var windowMaxIndex int32 = w.Min - 1
 
 	textLength := int32(len(text))
 	for index < textLength {
-		blockHash := HashCode(text[index - blockMaxIndex: index - blockMaxIndex + w.Block])
+		blockHash := HashCode(text[index-blockMaxIndex : index-blockMaxIndex+w.Block])
 		blockHash = blockHash % uint32(w.TableSize)
 		shift := w.ShiftTable[blockHash]
 		if shift > 0 {
 			index += shift
 		} else {
-			prefixHash := HashCode(text[index - windowMaxIndex:index-windowMaxIndex+w.Block])
+			prefixHash := HashCode(text[index-windowMaxIndex : index-windowMaxIndex+w.Block])
 			var p = &(w.HashTable[blockHash])
 			for _, pp := range *p {
 				if prefixHash == pp.Hash {
@@ -136,8 +135,9 @@ func (w *WuManber) Search(text string) int {
 					// we know first two characters already match
 					lenPattern := len(w.Patterns[pp.Index])
 					var i = index - windowMaxIndex
+					start := i
 					var j = 0
-					for ; i < textLength && j < lenPattern; {
+					for i < textLength && j < lenPattern {
 						if w.Patterns[pp.Index][j] != text[i] {
 							break
 						}
@@ -145,7 +145,8 @@ func (w *WuManber) Search(text string) int {
 						j++
 					}
 					if j == lenPattern {
-						hits++
+						matches = append(matches, w.Patterns[pp.Index])
+						matchPositions = append(matchPositions, int(start))
 						//log.Println(w.Patterns[pp.Index])
 					}
 				}
@@ -153,7 +154,7 @@ func (w *WuManber) Search(text string) int {
 			index++
 		} // end else
 	} // end for
-	return hits
+	return matches, matchPositions
 }
 
 func (w *WuManber) Serialize(path string) error {
@@ -188,10 +189,9 @@ func (w *WuManber) Serialize(path string) error {
 		binBuf.Write([]byte(w.Patterns[i]))
 	}
 	file.Write(binBuf.Bytes())
-	log.Println("Serialize WuManber model successfully.")
+	// log.Println("Serialize WuManber model successfully.")
 	return nil
 }
-
 
 func (w *WuManber) Deserialize(path string) error {
 	file, err := os.Open(path)
@@ -217,11 +217,11 @@ func (w *WuManber) Deserialize(path string) error {
 	//fmt.Println(w.Block)
 
 	w.ShiftTable = make([]int32, w.TableSize)
-	data = readNextBytes(file, 4 * int(w.TableSize))
+	data = readNextBytes(file, 4*int(w.TableSize))
 	buffer = bytes.NewBuffer(data)
 	err = binary.Read(buffer, binary.BigEndian, &w.ShiftTable)
 
-	log.Println("successfully deserialize SHIFT table")
+	// log.Println("successfully deserialize SHIFT table")
 
 	w.HashTable = make([]PrefixTable, w.TableSize)
 	var sizeOfPrefixIdPair int = 8
@@ -232,12 +232,12 @@ func (w *WuManber) Deserialize(path string) error {
 		err = binary.Read(buffer, binary.BigEndian, &l)
 
 		w.HashTable[i] = make([]PrefixIdPair, l)
-		data = readNextBytes(file, sizeOfPrefixIdPair * int(l))
+		data = readNextBytes(file, sizeOfPrefixIdPair*int(l))
 		buffer = bytes.NewBuffer(data)
 		err = binary.Read(buffer, binary.BigEndian, &w.HashTable[i])
 	}
 
-	log.Println("successfully deserialize Hash table")
+	// log.Println("successfully deserialize Hash table")
 
 	var patternSize int32 = 0
 
@@ -256,7 +256,7 @@ func (w *WuManber) Deserialize(path string) error {
 		//err = binary.Read(buffer, binary.BigEndian, &w.Patterns[i])
 		w.Patterns[i] = string(buffer.Bytes())
 	}
-	log.Println("successfully deserialize patterns")
+	// log.Println("successfully deserialize patterns")
 	return nil
 }
 
